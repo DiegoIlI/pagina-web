@@ -1,0 +1,57 @@
+name: Publicar pagina web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar dependencias
+        run: npm install --no-audit --no-fund
+
+      # La ruta base (/pagina-web/) viene de vite.config.js. No se pasa --base aqui
+      # para que exista una sola fuente de verdad.
+      - name: Compilar pagina
+        run: npm run build
+
+      # Proteccion contra la pantalla blanca: si los recursos no usan la ruta base, el build falla.
+      - name: Verificar rutas de recursos
+        run: |
+          grep -q 'src="/pagina-web/assets/' dist/index.html || (echo "ERROR: el JS no usa /pagina-web/" && cat dist/index.html && exit 1)
+          grep -q 'href="/pagina-web/favicon.svg"' dist/index.html || (echo "ERROR: favicon sin ruta base" && exit 1)
+          ls dist/assets
+
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Subir archivos
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+      - name: Publicar sitio web
+        id: deployment
+        uses: actions/deploy-pages@v4
